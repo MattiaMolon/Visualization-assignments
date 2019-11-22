@@ -93,7 +93,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         volume_maximum = volume.get_maximum()
 
         # Define a step size to make the loop faster
-        step = 2 if self.interactive_mode else 1
+        step = 10 if self.interactive_mode else 1
 
         for i in range(0, image_size, step):
             for j in range(0, image_size, step):
@@ -149,7 +149,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         volume_maximum = volume.get_maximum()
 
         # Define a step size to make the loop faster
-        step = 5 if self.interactive_mode else 1
+        step = 10 if self.interactive_mode else 1
 
         for i in range(0, image_size, step):
             for j in range(0, image_size, step):
@@ -207,15 +207,16 @@ class RaycastRendererImplementation(RaycastRenderer):
 
         # Center of the volume (3-dimensional)
         volume_center = [volume.dim_x / 2, volume.dim_y / 2, volume.dim_z / 2]
+        diagonal = math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2) / 2)
 
         # Define a step size to make the loop faster
-        step = 100 if self.interactive_mode else 1
+        step = 20 if self.interactive_mode else 1
 
         for i in tqdm(range(0, image_size, step), desc='render', ascii=True, leave=False):
             for j in range(0, image_size, step):
 
                 final_color: TFColor = None
-                for z in range(math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2)), 0, -10):
+                for z in range(diagonal, -diagonal, -2):
                     # Get the voxel coordinate X
                     voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
                                         + view_vector[0] * z + volume_center[0]
