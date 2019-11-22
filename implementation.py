@@ -6,7 +6,7 @@ from collections.abc import ValuesView
 import math
 
 
-# TODO: Implement trilinear interpolation
+# TODO: Implement trilinear interpolation (DONE)
 def get_voxel(volume: Volume, x: float, y: float, z: float):
     """
     Retrieves the value of a voxel for the given coordinates.
@@ -19,11 +19,47 @@ def get_voxel(volume: Volume, x: float, y: float, z: float):
     if x < 0 or y < 0 or z < 0 or x >= volume.dim_x or y >= volume.dim_y or z >= volume.dim_z:
         return 0
 
-    x = int(math.floor(x))
-    y = int(math.floor(y))
-    z = int(math.floor(z))
+    """
+    (x0, ..., x7) nearest voxels to [x,y,z] 
+       x7--------x6
+      /|        /|
+     / |       / |
+    x3--------x2 |      volume.size = (256, 256, 163)
+    |  |      |  |
+    |  x4-----|--x5
+    | /       | /
+    |/        |/
+    x0--------x1
+    """
 
-    return volume.data[x, y, z]
+    # fix limit coordinates
+    x = x - 1.0 if x > 255.0 else x
+    y = y - 1.0 if y > 255.0 else y
+    z = z - 1.0 if z > 162.0 else z
+
+    # compute voxels
+    x0 = volume.data[math.floor(x), math.floor(y), math.floor(z)]
+    x1 = volume.data[math.ceil(x), math.floor(y), math.floor(z)]
+    x2 = volume.data[math.ceil(x), math.ceil(y), math.floor(z)]
+    x3 = volume.data[math.floor(x), math.ceil(y), math.floor(z)]
+    x4 = volume.data[math.floor(x), math.floor(y), math.ceil(z)]
+    x5 = volume.data[math.ceil(x), math.floor(y), math.ceil(z)]
+    x6 = volume.data[math.ceil(x), math.ceil(y), math.ceil(z)]
+    x7 = volume.data[math.floor(x), math.ceil(y), math.ceil(z)]
+
+    # compute parameters
+    alpha = x - math.floor(x)
+    beta = y - math.floor(y)
+    gamma = z - math.floor(z)
+
+    return  (1-alpha)*(1-beta)*(1-gamma)*x0 + \
+            alpha*(1-beta)*(1-gamma)*x1 + \
+            (1-alpha)*(1-beta)*gamma*x4 + \
+            alpha*(1-beta)*gamma*x5 + \
+            (1-alpha)*beta*(1-gamma)*x3 + \
+            alpha*beta*(1-gamma)*x2 + \
+            (1-alpha)*beta*gamma*x7 + \
+            alpha*beta*gamma*x6
 
 
 class RaycastRendererImplementation(RaycastRenderer):
@@ -35,8 +71,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         """Clears the image data"""
         self.image.fill(0)
 
-    # TODO: Implement trilinear interpolation
-
+    # TODO: Implement trilinear interpolation (DONE)
     def render_slicer(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -58,7 +93,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         volume_maximum = volume.get_maximum()
 
         # Define a step size to make the loop faster
-        step = 5 if self.interactive_mode else 1
+        step = 2 if self.interactive_mode else 1
 
         for i in range(0, image_size, step):
             for j in range(0, image_size, step):
@@ -95,7 +130,8 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
 
-    # TODO: Implement MIP function
+    # TODO: Implement MIP function (DONE)
+    # TODO: Fix limits of third cicle
     def render_mip(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -119,7 +155,7 @@ class RaycastRendererImplementation(RaycastRenderer):
             for j in range(0, image_size, step):
                 
                 value = 0
-                for z in range(0, volume.dim_z, 2):
+                for z in range(0, math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2)), 2):
                     # Get the voxel coordinate X
                     voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
                                         + view_vector[0] * z + volume_center[0]

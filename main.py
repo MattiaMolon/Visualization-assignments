@@ -7,7 +7,7 @@ except:
     pass
 
 app = wx.App()
-frame = GLFrame(None, "Gene Visualization")
+frame = GLFrame(None, "Visualizer")
 frame.Show()
 
 app.MainLoop()
