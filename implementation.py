@@ -3,10 +3,11 @@ from genevis.render import RaycastRenderer
 from genevis.transfer_function import TFColor
 from volume.volume import GradientVolume, Volume
 from collections.abc import ValuesView
+from tqdm import tqdm
 import math
 
 
-# TODO: Implement trilinear interpolation (DONE)
+# TODO: (DONE) Implement trilinear interpolation 
 def get_voxel(volume: Volume, x: float, y: float, z: float):
     """
     Retrieves the value of a voxel for the given coordinates.
@@ -61,7 +62,6 @@ def get_voxel(volume: Volume, x: float, y: float, z: float):
             (1-alpha)*beta*gamma*x7 + \
             alpha*beta*gamma*x6
 
-
 class RaycastRendererImplementation(RaycastRenderer):
     """
     Class to be implemented.
@@ -71,7 +71,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         """Clears the image data"""
         self.image.fill(0)
 
-    # TODO: Implement trilinear interpolation (DONE)
+    # TODO: (DONE) Implement trilinear interpolation 
     def render_slicer(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -130,7 +130,7 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
 
-    # TODO: Implement MIP function (DONE)
+    # TODO: (DONE) Implement MIP function 
     # TODO: Fix limits of third cicle
     def render_mip(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
@@ -149,7 +149,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         volume_maximum = volume.get_maximum()
 
         # Define a step size to make the loop faster
-        step = 2 if self.interactive_mode else 1
+        step = 5 if self.interactive_mode else 1
 
         for i in range(0, image_size, step):
             for j in range(0, image_size, step):
@@ -189,11 +189,80 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 1] = green
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
-        pass
 
     # TODO: Implement Compositing function. TFColor is already imported. self.tfunc is the current transfer function.
+    # TODO: Fix limits of third cicle
+    # TODO: Fix value rounding
     def render_compositing(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
-        pass
+        # Clear the image
+        self.clear_image()
+        
+        # ration vectors
+        u_vector = view_matrix[0:3] # X
+        v_vector = view_matrix[4:7] # Y
+        view_vector = view_matrix[8:11] # Z
+
+        # Center of the image. Image is squared
+        image_center = image_size / 2
+
+        # Center of the volume (3-dimensional)
+        volume_center = [volume.dim_x / 2, volume.dim_y / 2, volume.dim_z / 2]
+
+        # Define a step size to make the loop faster
+        step = 100 if self.interactive_mode else 1
+
+        for i in tqdm(range(0, image_size, step), desc='render', ascii=True, leave=False):
+            for j in range(0, image_size, step):
+
+                final_color: TFColor = None
+                for z in range(math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2)), 0, -10):
+                    # Get the voxel coordinate X
+                    voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
+                                        + view_vector[0] * z + volume_center[0]
+
+                    # Get the voxel coordinate Y
+                    voxel_coordinate_y = u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) \
+                                        + view_vector[1] * z + volume_center[1]
+
+                    # Get the voxel coordinate Z
+                    voxel_coordinate_z = u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) \
+                                        + view_vector[2] * z + volume_center[2]
+
+                    # Get voxel value
+                    value = get_voxel(volume, voxel_coordinate_x, voxel_coordinate_y, voxel_coordinate_z)
+                    value = round(value)
+                    
+                    # Get voxel RGBA
+                    base_color = self.tfunc.get_color(value)
+                    voxel_color = TFColor(base_color.r*base_color.a, base_color.g*base_color.a, \
+                                          base_color.b*base_color.a, base_color.a)
+                    if final_color != None:
+                        r = voxel_color.r + (1 - voxel_color.a)*final_color.r
+                        g = voxel_color.g + (1 - voxel_color.a)*final_color.g
+                        b = voxel_color.b + (1 - voxel_color.a)*final_color.b
+                        voxel_color = TFColor(r, g, b, voxel_color.a)
+                    
+                    final_color = voxel_color
+
+                # Normalize value to be between 0 and 1
+                red = final_color.r
+                green = final_color.g
+                blue = final_color.b
+                alpha = 1.0
+
+                # Compute the color value (0...255)
+                red = math.floor(red * 255) if red < 255 else 255
+                green = math.floor(green * 255) if green < 255 else 255
+                blue = math.floor(blue * 255) if blue < 255 else 255
+                alpha = math.floor(alpha * 255) if alpha < 255 else 255
+
+                # Assign color to the pixel i, j
+                image[(j * image_size + i) * 4] = red
+                image[(j * image_size + i) * 4 + 1] = green
+                image[(j * image_size + i) * 4 + 2] = blue
+                image[(j * image_size + i) * 4 + 3] = alpha
+
+        
 
     # TODO: Implement function to render multiple energy volumes and annotation volume as a silhouette.
     def render_mouse_brain(self, view_matrix: np.ndarray, annotation_volume: Volume, energy_volumes: dict,
