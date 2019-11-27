@@ -71,7 +71,6 @@ class RaycastRendererImplementation(RaycastRenderer):
         """Clears the image data"""
         self.image.fill(0)
 
-    # TODO: (DONE) Implement trilinear interpolation 
     def render_slicer(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -130,8 +129,6 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
 
-    # TODO: (DONE) Implement MIP function 
-    # TODO: Fix limits of third cicle
     def render_mip(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -147,15 +144,18 @@ class RaycastRendererImplementation(RaycastRenderer):
         # Center of the volume (3-dimensional)
         volume_center = [volume.dim_x / 2, volume.dim_y / 2, volume.dim_z / 2]
         volume_maximum = volume.get_maximum()
+        
+        # Diagonal cube
+        diagonal = math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2) / 2)
 
         # Define a step size to make the loop faster
         step = 10 if self.interactive_mode else 1
 
-        for i in range(0, image_size, step):
+        for i in tqdm(range(0, image_size, step), desc='render', leave=False):
             for j in range(0, image_size, step):
                 
                 value = 0
-                for z in range(0, math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2)), 2):
+                for z in range(-diagonal, diagonal, 2):
                     # Get the voxel coordinate X
                     voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
                                         + view_vector[0] * z + volume_center[0]
@@ -190,9 +190,8 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
 
-    # TODO: Implement Compositing function. TFColor is already imported. self.tfunc is the current transfer function.
-    # TODO: Fix limits of third cicle
-    # TODO: Fix value rounding
+
+    # TODO: Do not visualize black
     def render_compositing(self, view_matrix: np.ndarray, volume: Volume, image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
@@ -210,12 +209,12 @@ class RaycastRendererImplementation(RaycastRenderer):
         diagonal = math.floor(math.sqrt(volume.dim_x**2 + volume.dim_y**2 + volume.dim_z**2) / 2)
 
         # Define a step size to make the loop faster
-        step = 20 if self.interactive_mode else 1
+        step = 10 if self.interactive_mode else 1
 
-        for i in tqdm(range(0, image_size, step), desc='render', ascii=True, leave=False):
+        for i in tqdm(range(0, image_size, step), desc='render', leave=False):
             for j in range(0, image_size, step):
 
-                final_color: TFColor = None
+                last_color: TFColor = None
                 for z in range(diagonal, -diagonal, -2):
                     # Get the voxel coordinate X
                     voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
@@ -237,19 +236,19 @@ class RaycastRendererImplementation(RaycastRenderer):
                     base_color = self.tfunc.get_color(value)
                     voxel_color = TFColor(base_color.r*base_color.a, base_color.g*base_color.a, \
                                           base_color.b*base_color.a, base_color.a)
-                    if final_color != None:
-                        r = voxel_color.r + (1 - voxel_color.a)*final_color.r
-                        g = voxel_color.g + (1 - voxel_color.a)*final_color.g
-                        b = voxel_color.b + (1 - voxel_color.a)*final_color.b
-                        voxel_color = TFColor(r, g, b, voxel_color.a)
+                    if last_color != None:
+                        r = voxel_color.r + (1 - voxel_color.a)*last_color.r
+                        g = voxel_color.g + (1 - voxel_color.a)*last_color.g
+                        b = voxel_color.b + (1 - voxel_color.a)*last_color.b
+                        voxel_color = TFColor(r, g, b, 1.0)
                     
-                    final_color = voxel_color
+                    last_color = voxel_color
 
                 # Normalize value to be between 0 and 1
-                red = final_color.r
-                green = final_color.g
-                blue = final_color.b
-                alpha = 1.0
+                red = last_color.r
+                green = last_color.g
+                blue = last_color.b
+                alpha = last_color.a
 
                 # Compute the color value (0...255)
                 red = math.floor(red * 255) if red < 255 else 255
