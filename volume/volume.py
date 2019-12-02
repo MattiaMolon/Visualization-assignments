@@ -54,13 +54,14 @@ ZERO_GRADIENT = VoxelGradient()
 
 
 class GradientVolume:
-    def __init__(self, volume):
+    def __init__(self, volume: Volume):
         self.volume = volume
         self.data = []
         self.compute()
         self.max_magnitude = -1.0
 
     def get_gradient(self, x, y, z):
+        print(len(self.data), self.volume.dim_x, self.volume.dim_y, self.volume.dim_z,  x + self.volume.dim_x * (y + self.volume.dim_y * z))
         return self.data[x + self.volume.dim_x * (y + self.volume.dim_y * z)]
 
     def set_gradient(self, x, y, z, value):
@@ -73,9 +74,30 @@ class GradientVolume:
         """
         Computes the gradient for the current volume
         """
-        # this just initializes all gradients to the vector (0,0,0)
+        # construct data with empty VoxelGradients()
         self.data = [ZERO_GRADIENT] * (self.volume.dim_x * self.volume.dim_y * self.volume.dim_z)
 
+        # get a unique id 
+        id_structure = np.unique(self.volume.data).item(1)
+        structures_volume = self.volume.data.copy()
+        structures_volume[structures_volume != id_structure] = 0
+
+        for x in range(0, self.volume.dim_x):
+            for y in range(0, self.volume.dim_y):
+                for z in range(0, self.volume.dim_z):
+                    if x == 0 or y == 0 or z == 0 or x == self.volume.dim_x - 1 or y == self.volume.dim_y - 1 or z == self.volume.dim_z - 1:
+                        self.set_gradient(x, y, z, VoxelGradient())
+                    else: 
+                        gx = (self.volume.get_voxel(x-1, y, z) - self.volume.get_voxel(x+1, y, z)) / 2
+                        gy = (self.volume.get_voxel(x, y-1, z) - self.volume.get_voxel(x, y+1, z)) / 2
+                        gz = (self.volume.get_voxel(x, y, z-1) - self.volume.get_voxel(x, y, z+1)) / 2
+                        self.set_gradient(x, y, z, VoxelGradient(gx, gy, gz))  
+
+        #delta = self.get_max_gradient_magnitude() * 0.1
+        #for id,x in enumerate(self.data):
+        #    if abs(x.magnitude - self.get_max_gradient_magnitude()) > delta:
+        #        x.magnitude = 0.0
+        
     def get_max_gradient_magnitude(self):
         if self.max_magnitude < 0:
             gradient = max(self.data, key=lambda x: x.magnitude)
