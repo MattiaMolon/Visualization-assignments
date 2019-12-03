@@ -57,6 +57,7 @@ class GradientVolume:
     def __init__(self, volume: Volume):
         self.volume = volume
         self.data = []
+        self.n_structures = 4 # number of structures to visualize (taken in order by volume dimension)
         self.compute()
         self.max_magnitude = -1.0
 
@@ -79,11 +80,14 @@ class GradientVolume:
         self.data = [ZERO_GRADIENT] * (self.volume.dim_x * self.volume.dim_y * self.volume.dim_z)
 
         # get a unique id 
-        unique, frequencies = np.unique(self.volume.data, return_counts=True)
-        indexes_feq = np.flip(np.argsort(frequencies)) # indexes of unique ordered by frequency
-        self.volume.data[self.volume.data != unique[indexes_feq[1]]] = 0
-        self.volume.data[self.volume.data == unique[indexes_feq[1]]] = 100
+        unique, frequencies = np.unique(self.volume.data, return_counts=True) # unique elements in volume, frequences
+        indexes_freq = np.flip(np.argsort(frequencies))                       # indexes of unique ordered by frequency
+        considered_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]     # first n_structures structures
+        mask = np.isin(self.volume.data, considered_structures)               # mask to select only elements present in considered_structures
+        self.volume.data[~mask] = 0                                           # set non considered structures to background
+        self.volume.data[mask] = 100                                          # set all structures to the same value
 
+        # compute gradient for each voxel
         for x in range(0, self.volume.dim_x):
             for y in range(0, self.volume.dim_y):
                 for z in range(0, self.volume.dim_z):
@@ -101,3 +105,8 @@ class GradientVolume:
             self.max_magnitude = gradient.magnitude
 
         return self.max_magnitude
+
+    def solid_borders(self):
+        for x in self.data:
+            if x.magnitude != 0:
+                x.magnitude = 100

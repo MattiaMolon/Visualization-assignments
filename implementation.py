@@ -214,7 +214,7 @@ class RaycastRendererImplementation(RaycastRenderer):
             for j in range(0, image_size, step):
 
                 last_color: TFColor = None
-                for z in range(diagonal, -diagonal, -2):
+                for z in range(diagonal, -diagonal, -5):
                     # Get the voxel coordinate X
                     voxel_coordinate_x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
                                         + view_vector[0] * z + volume_center[0]
@@ -260,95 +260,3 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 1] = green
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
-
-    # TODO: Implement function to render multiple energy volumes and annotation volume as a silhouette.
-    # TODO: Implement your code considering these volumes (annotation_volume, and energy_volumes)
-    def render_mouse_brain(self, view_matrix: np.ndarray, annotation_volume: Volume, energy_volumes: dict, 
-                            image_size: int, image: np.ndarray):
-        # Clear the image
-        self.clear_image()
-
-        #set transfer function
-        range_max = math.ceil(self.annotation_gradient_volume.get_max_gradient_magnitude() * 1.5)
-        self.tfunc.init(0, range_max)
-        
-        # ration vectors
-        u_vector = view_matrix[0:3] # X
-        v_vector = view_matrix[4:7] # Y
-        view_vector = view_matrix[8:11] # Z
-
-        # Center of the image. Image is squared
-        image_center = image_size / 2
-
-        # Center of the volume (3-dimensional)
-        gradient_volume = self.annotation_gradient_volume.volume
-        volume_center = [gradient_volume.dim_x / 2, gradient_volume.dim_y / 2, gradient_volume.dim_z / 2]
-        diagonal = math.floor(math.sqrt(gradient_volume.dim_x**2 + gradient_volume.dim_y**2 + gradient_volume.dim_z**2) / 2)
-
-        # Define a step size to make the loop faster
-        step = 10 if self.interactive_mode else 1
-
-        for i in tqdm(range(0, image_size, step), desc='render', leave=False):
-            for j in range(0, image_size, step):
-
-                last_color: TFColor = None
-                for z in range(diagonal, -diagonal, -1):
-
-                    # Get the voxel coordinate X
-                    voxel_coordinate_x = math.floor(u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
-                                        + view_vector[0] * z + volume_center[0])
-
-                    # Get the voxel coordinate Y
-                    voxel_coordinate_y = math.floor(u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) \
-                                        + view_vector[1] * z + volume_center[1])
-
-                    # Get the voxel coordinate Z
-                    voxel_coordinate_z = math.floor(u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) \
-                                        + view_vector[2] * z + volume_center[2])
-                    
-                    # Get voxel value
-                    value = self.annotation_gradient_volume.get_gradient(voxel_coordinate_x, voxel_coordinate_y, voxel_coordinate_z).magnitude
-                    if value != 0:
-                        value = round(value)
-                        
-                        # Get voxel RGBA
-                        base_color = self.tfunc.get_color(value)
-                        voxel_color = TFColor(base_color.r*base_color.a, base_color.g*base_color.a, \
-                                            base_color.b*base_color.a, base_color.a)
-                        if last_color != None:
-                            r = voxel_color.r + (1 - voxel_color.a)*last_color.r
-                            g = voxel_color.g + (1 - voxel_color.a)*last_color.g
-                            b = voxel_color.b + (1 - voxel_color.a)*last_color.b
-                            voxel_color = TFColor(r, g, b, 1.0)
-                        
-                        last_color = voxel_color
-
-                # set color pixel image
-                if last_color != None:
-                    red = last_color.r
-                    green = last_color.g
-                    blue = last_color.b
-                    alpha = last_color.a
-                else:
-                    red = 0.0
-                    green = 0.0
-                    blue = 0.0
-                    alpha = 0.0
-
-                # Compute the color value (0...255)
-                red = math.floor(red * 255) if red < 255 else 255
-                green = math.floor(green * 255) if green < 255 else 255
-                blue = math.floor(blue * 255) if blue < 255 else 255
-                alpha = math.floor(alpha * 255) if alpha < 255 else 255
-
-                # Assign color to the pixel i, j
-                image[(j * image_size + i) * 4] = red
-                image[(j * image_size + i) * 4 + 1] = green
-                image[(j * image_size + i) * 4 + 2] = blue
-                image[(j * image_size + i) * 4 + 3] = alpha
-
-
-class GradientVolumeImpl(GradientVolume):
-    # TODO: Implement gradient compute function. See parent class to check available attributes.
-    def compute(self):
-        pass
