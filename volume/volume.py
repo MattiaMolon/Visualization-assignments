@@ -60,8 +60,9 @@ class GradientVolume:
         self.compute()
         self.max_magnitude = -1.0
 
-    def get_gradient(self, x, y, z):
-        print(len(self.data), self.volume.dim_x, self.volume.dim_y, self.volume.dim_z,  x + self.volume.dim_x * (y + self.volume.dim_y * z))
+    def get_gradient(self, x, y, z) -> VoxelGradient:
+        if x < 0 or y < 0 or z < 0 or x >= self.volume.dim_x or y >= self.volume.dim_y or z >= self.volume.dim_z:
+            return VoxelGradient()
         return self.data[x + self.volume.dim_x * (y + self.volume.dim_y * z)]
 
     def set_gradient(self, x, y, z, value):
@@ -78,9 +79,10 @@ class GradientVolume:
         self.data = [ZERO_GRADIENT] * (self.volume.dim_x * self.volume.dim_y * self.volume.dim_z)
 
         # get a unique id 
-        id_structure = np.unique(self.volume.data).item(1)
-        structures_volume = self.volume.data.copy()
-        structures_volume[structures_volume != id_structure] = 0
+        unique, frequencies = np.unique(self.volume.data, return_counts=True)
+        indexes_feq = np.flip(np.argsort(frequencies)) # indexes of unique ordered by frequency
+        self.volume.data[self.volume.data != unique[indexes_feq[1]]] = 0
+        self.volume.data[self.volume.data == unique[indexes_feq[1]]] = 100
 
         for x in range(0, self.volume.dim_x):
             for y in range(0, self.volume.dim_y):
@@ -92,11 +94,6 @@ class GradientVolume:
                         gy = (self.volume.get_voxel(x, y-1, z) - self.volume.get_voxel(x, y+1, z)) / 2
                         gz = (self.volume.get_voxel(x, y, z-1) - self.volume.get_voxel(x, y, z+1)) / 2
                         self.set_gradient(x, y, z, VoxelGradient(gx, gy, gz))  
-
-        #delta = self.get_max_gradient_magnitude() * 0.1
-        #for id,x in enumerate(self.data):
-        #    if abs(x.magnitude - self.get_max_gradient_magnitude()) > delta:
-        #        x.magnitude = 0.0
         
     def get_max_gradient_magnitude(self):
         if self.max_magnitude < 0:

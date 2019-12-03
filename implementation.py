@@ -2,7 +2,7 @@ import numpy as np
 from genevis.render import RaycastRenderer
 from genevis.transfer_function import TFColor
 from math import floor
-from volume.volume import GradientVolume, Volume
+from volume.volume import GradientVolume, Volume, VoxelGradient
 from collections.abc import ValuesView
 from tqdm import tqdm
 import math
@@ -267,7 +267,10 @@ class RaycastRendererImplementation(RaycastRenderer):
                             image_size: int, image: np.ndarray):
         # Clear the image
         self.clear_image()
-        self.tfunc.init(0, math.ceil(self.annotation_gradient_volume.get_max_gradient_magnitude() * 2))
+
+        #set transfer function
+        range_max = math.ceil(self.annotation_gradient_volume.get_max_gradient_magnitude() * 1.5)
+        self.tfunc.init(0, range_max)
         
         # ration vectors
         u_vector = view_matrix[0:3] # X
@@ -278,8 +281,9 @@ class RaycastRendererImplementation(RaycastRenderer):
         image_center = image_size / 2
 
         # Center of the volume (3-dimensional)
-        volume_center = [annotation_volume.dim_x / 2, annotation_volume.dim_y / 2, annotation_volume.dim_z / 2]
-        diagonal = math.floor(math.sqrt(annotation_volume.dim_x**2 + annotation_volume.dim_y**2 + annotation_volume.dim_z**2) / 2)
+        gradient_volume = self.annotation_gradient_volume.volume
+        volume_center = [gradient_volume.dim_x / 2, gradient_volume.dim_y / 2, gradient_volume.dim_z / 2]
+        diagonal = math.floor(math.sqrt(gradient_volume.dim_x**2 + gradient_volume.dim_y**2 + gradient_volume.dim_z**2) / 2)
 
         # Define a step size to make the loop faster
         step = 10 if self.interactive_mode else 1
@@ -288,7 +292,7 @@ class RaycastRendererImplementation(RaycastRenderer):
             for j in range(0, image_size, step):
 
                 last_color: TFColor = None
-                for z in range(diagonal, -diagonal, -2):
+                for z in range(diagonal, -diagonal, -1):
 
                     # Get the voxel coordinate X
                     voxel_coordinate_x = math.floor(u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
@@ -301,10 +305,9 @@ class RaycastRendererImplementation(RaycastRenderer):
                     # Get the voxel coordinate Z
                     voxel_coordinate_z = math.floor(u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) \
                                         + view_vector[2] * z + volume_center[2])
-                    print(voxel_coordinate_x, voxel_coordinate_y, voxel_coordinate_z)
-
+                    
                     # Get voxel value
-                    value = self.annotation_gradient_volume.get_gradient(voxel_coordinate_x, voxel_coordinate_y, voxel_coordinate_z)
+                    value = self.annotation_gradient_volume.get_gradient(voxel_coordinate_x, voxel_coordinate_y, voxel_coordinate_z).magnitude
                     if value != 0:
                         value = round(value)
                         
