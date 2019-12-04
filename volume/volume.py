@@ -58,7 +58,7 @@ class GradientVolume:
         self.volume = volume
         self.data = []
         self.n_structures = 4 # number of structures to visualize (taken in order by volume dimension)
-        self.considered_structures = []
+        self.mask = [] # annotation mask
         self.compute()
         self.max_magnitude = -1.0
 
@@ -83,10 +83,11 @@ class GradientVolume:
         # get a unique id 
         unique, frequencies = np.unique(self.volume.data, return_counts=True) # unique elements in volume, frequences
         indexes_freq = np.flip(np.argsort(frequencies))                       # indexes of unique ordered by frequency
-        self.considered_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]     # first n_structures structures
-        mask = np.isin(self.volume.data, self.considered_structures)               # mask to select only elements present in considered_structures
-        self.volume.data[~mask] = 0                                           # set non considered structures to background
-        self.volume.data[mask] = 100                                          # set all structures to the same value
+        considered_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]     # first n_structures structures
+        self.mask = np.isin(self.volume.data, considered_structures)               # mask to select only elements present in considered_structures
+        self.volume.data[~self.mask] = 0                                           # set non considered structures to background
+        data_backup = np.copy(self.volume.data)                                    # backup per dopo cazo    
+        self.volume.data[self.mask] = 100                                          # set all structures to the same value
 
         # compute gradient for each voxel
         for x in range(0, self.volume.dim_x):
@@ -98,7 +99,9 @@ class GradientVolume:
                         gx = (self.volume.get_voxel(x-1, y, z) - self.volume.get_voxel(x+1, y, z)) / 2
                         gy = (self.volume.get_voxel(x, y-1, z) - self.volume.get_voxel(x, y+1, z)) / 2
                         gz = (self.volume.get_voxel(x, y, z-1) - self.volume.get_voxel(x, y, z+1)) / 2
-                        self.set_gradient(x, y, z, VoxelGradient(gx, gy, gz))  
+                        self.set_gradient(x, y, z, VoxelGradient(gx, gy, gz))
+
+        self.volume.data = np.copy(data_backup)  
         
     def get_max_gradient_magnitude(self):
         if self.max_magnitude < 0:
