@@ -16,6 +16,29 @@ class TFColor:
     def __str__(self) -> str:
         return f"({self.r}, {self.g}, {self.b}, {self.a})"
 
+class ControlPoint:
+    value: int
+    color: TFColor
+
+    def __init__(self, value: int, color: TFColor):
+        self.value = value
+        self.color = color
+
+    def __eq__(self, other: 'ControlPoint') -> bool:
+        return self.value == other.value
+
+    def __lt__(self, other: 'ControlPoint') -> bool:
+        return self.value < other.value
+
+    def __le__(self, other: 'ControlPoint') -> bool:
+        return self.value <= other.value
+
+    def __gt__(self, other: 'ControlPoint') -> bool:
+        return self.value > other.value
+
+    def __ge__(self, other: 'ControlPoint') -> bool:
+        return self.value >= other.value
+
 class TransferFunction:
     sMin = 0
     sMax = 0
@@ -107,29 +130,3 @@ class TransferFunction:
                 new_color.a = prev_point.color.a + frac * (next_point.color.a - prev_point.color.a)
 
                 self.LUT[self.computeLUTindex(k)] = new_color
-
-
-
-class ControlPoint:
-    value: int
-    color: TFColor
-
-    def __init__(self, value: int, color: TFColor):
-        self.value = value
-        self.color = color
-
-    def __eq__(self, other: 'ControlPoint') -> bool:
-        return self.value == other.value
-
-    def __lt__(self, other: 'ControlPoint') -> bool:
-        return self.value < other.value
-
-    def __le__(self, other: 'ControlPoint') -> bool:
-        return self.value <= other.value
-
-    def __gt__(self, other: 'ControlPoint') -> bool:
-        return self.value > other.value
-
-    def __ge__(self, other: 'ControlPoint') -> bool:
-        return self.value >= other.value
-

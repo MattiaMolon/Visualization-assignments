@@ -10,6 +10,20 @@ import random
 
 # TODO: fare documentazione
 
+def get_colors_vector():
+    x = []
+    x.append(TFColor(255.0, 0.0, 0.0, 1.0)) # red
+    x.append(TFColor(153.0, 102.0, 51.0, 1.0)) # brown
+    x.append(TFColor(102.0, 0.0, 204.0, 1.0)) # dark purple
+    x.append(TFColor(102.0, 255.0, 102.0, 1.0)) # light green
+    x.append(TFColor(0.0, 255.0, 255.0, 1.0)) # light blue
+    x.append(TFColor(255.0, 153.0, 51.0, 1.0)) # orange
+    x.append(TFColor(255.0, 0.0, 255.0, 1.0)) # purple
+    x.append(TFColor(0.0, 255.0, 0.0,  1.0)) # green
+    x.append(TFColor(255.0, 255.0, 0.0,  1.0)) # yellow
+    x.append(TFColor(0.0, 0.0, 255.0, 1.0)) # blue
+    return x
+
 def get_voxel(volume: Volume, x: float, y: float, z: float):
     """
     Retrieves the value of a voxel for the given coordinates.
@@ -90,28 +104,18 @@ def get_max_voxel(x: float, y: float, z: float, volumes: dict) -> float:
 
 # get mean color value of voxel in a set of volumes
 # TODO: discutere alpha value
-def get_mean_voxel_color(x: float, y: float, z: float, volumes: dict, colors: dict) -> float:
-    
-    color = None
-    n_colors = 0
-    for key in volumes:
-        value = round( get_voxel(volumes[key], x, y, z) )
-        if value > 0:
-            n_colors += 1
-            tmp_color: TFColor = colors[key].get_color(value)
-            if color != None:
-                print(tmp_color.r, tmp_color.g, tmp_color.b, tmp_color.a)
-                tmp_color.r += color.r
-                tmp_color.g += color.g
-                tmp_color.b += color.b
-                tmp_color.a = color.a if tmp_color.a < color.a else tmp_color.a
+def get_max_voxel_color(x: float, y: float, z: float, volumes: dict, tfunc: dict, treshold: float = 0.40) -> TFColor:
+    value = 0.0
+    key = None
+    for tmp_key in volumes:
+        tmp_value = round( get_voxel(volumes[tmp_key], x, y, z) )
+        if tmp_value > treshold*(tfunc[tmp_key].sMax / 1.25) :
+            value = tmp_value
+            key = tmp_key
 
-            color = tmp_color
-            
-    if n_colors > 0:
-        color.r /= n_colors 
-        color.g /= n_colors
-        color.b /= n_colors
+    color: TFColor = None
+    if key != None:
+        color = tfunc[key].get_color(value)        
     
     return color
 
@@ -407,11 +411,11 @@ class RaycastRendererImplementation(RaycastRenderer):
 
         # set tfunction for each energy
         # TODO: calcolare tfuncions in funzione del massimo totale
+        colors = get_colors_vector()
         tfunc_dict = {}
         for key in energy_volumes.keys():   
             # find tfcuntion color and maximum value of energy
-            tmp_color = TFColor(random.random()*255, random.random()*255, random.random()*255, 1.0)
-            print(tmp_color.r, tmp_color.g, tmp_color.b, tmp_color.a)
+            tmp_color = colors.pop()
             range_max = math.ceil(np.max(energy_volumes[key].data) * 1.25)
             
             # define tfunction of the energy volume
@@ -438,6 +442,7 @@ class RaycastRendererImplementation(RaycastRenderer):
             for j in range(0, image_size, step):
 
                 last_color: TFColor = None
+                max_value: float = 0.0
                 for z in range(diagonal, -diagonal, -1):
 
                     # Get the voxel coordinate X
@@ -452,10 +457,12 @@ class RaycastRendererImplementation(RaycastRenderer):
                     voxel_coordinate_z = math.floor(u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) \
                                         + view_vector[2] * z + volume_center[2])
                     
+                    ###########################################
+                    ######## COMPOSITING CON MAX VOXEL ########
                     # Get maximum voxel value
-                    voxel_color: TFColor = get_mean_voxel_color(voxel_coordinate_x, voxel_coordinate_y, \
-                                                               voxel_coordinate_z, energy_volumes, tfunc_dict)
-                                            
+                    voxel_color: TFColor = get_max_voxel_color(voxel_coordinate_x, voxel_coordinate_y, \
+                                                                voxel_coordinate_z, energy_volumes, tfunc_dict)
+
                     if voxel_color != None:
                         # Get voxel RGBA
                         voxel_color = TFColor(voxel_color.r*voxel_color.a, voxel_color.g*voxel_color.a, \
@@ -465,15 +472,23 @@ class RaycastRendererImplementation(RaycastRenderer):
                             g = voxel_color.g + (1 - voxel_color.a)*last_color.g
                             b = voxel_color.b + (1 - voxel_color.a)*last_color.b
                             voxel_color = TFColor(r, g, b, 1.0)
-                        
                         last_color = voxel_color
+                    ###########################################
+                    ################### MIP ###################
+                    # tupla: tuple(TFColor, float) = get_max_voxel_color(voxel_coordinate_x, voxel_coordinate_y, \
+                    #                                              voxel_coordinate_z, energy_volumes, tfunc_dict)
+
+                    # if tupla[1] > max_value:
+                    #     last_color = tupla[0]
+                    #     max_value = tupla[1]
+
 
                 # set color pixel image
                 if last_color != None:
                     red = last_color.r
                     green = last_color.g
                     blue = last_color.b
-                    alpha = last_color.a
+                    alpha = 1.0
                 else:
                     red = 0.0
                     green = 0.0
