@@ -58,6 +58,7 @@ class GradientVolume:
         self.volume = volume
         self.data = []
         self.n_structures = 4 # number of structures to visualize (taken in order by volume dimension)
+        self.considered_structures = []
         self.compute()
         self.max_magnitude = -1.0
 
@@ -82,8 +83,8 @@ class GradientVolume:
         # get a unique id 
         unique, frequencies = np.unique(self.volume.data, return_counts=True) # unique elements in volume, frequences
         indexes_freq = np.flip(np.argsort(frequencies))                       # indexes of unique ordered by frequency
-        considered_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]     # first n_structures structures
-        mask = np.isin(self.volume.data, considered_structures)               # mask to select only elements present in considered_structures
+        self.considered_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]     # first n_structures structures
+        mask = np.isin(self.volume.data, self.considered_structures)               # mask to select only elements present in considered_structures
         self.volume.data[~mask] = 0                                           # set non considered structures to background
         self.volume.data[mask] = 100                                          # set all structures to the same value
 

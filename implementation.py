@@ -103,13 +103,32 @@ def get_max_voxel(x: float, y: float, z: float, volumes: dict) -> float:
     return value
 
 # get mean color value of voxel in a set of volumes
-# TODO: discutere alpha value
-def get_max_voxel_color(x: float, y: float, z: float, volumes: dict, tfunc: dict, treshold: float = 0.40) -> TFColor:
+def get_max_voxel_color(x: float, y: float, z: float, volumes: dict, tfunc: dict, treshold: float = 0.50) -> TFColor:
     value = 0.0
     key = None
     for tmp_key in volumes:
         tmp_value = round( get_voxel(volumes[tmp_key], x, y, z) )
         if tmp_value > treshold*(tfunc[tmp_key].sMax / 1.25) :
+            value = tmp_value
+            key = tmp_key
+
+    color: TFColor = None
+    if key != None:
+        color = tfunc[key].get_color(value)        
+    
+    return color
+
+# get mean color value of voxel in a set of volumes considering the annotations
+def get_max_voxel_color_annot(x: float, y: float, z: float, energies: dict, tfunc: dict, \
+                              annotations: Volume, gradient: Volume, treshold: float = 0.0) -> TFColor:
+    value = 0.0
+    key = None
+    for tmp_key in energies:
+        tmp_value = round( get_voxel(energies[tmp_key], x, y, z) )
+        print(annotations.data[math.floor(x),math.floor(y),math.floor(z)], gradient.considered_structures)
+        if tmp_value > treshold*(tfunc[tmp_key].sMax / 1.25) and \
+            annotations.data[round(x),round(y),round(z)] in gradient.considered_structures:
+            print("ciaone")
             value = tmp_value
             key = tmp_key
 
@@ -404,7 +423,7 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 3] = alpha
     
     # visualize energy levels
-    def render_mouse_brain(self, view_matrix: np.ndarray, annotation_volume: Volume, energy_volumes: dict, 
+    def render_mouse_brain_energies(self, view_matrix: np.ndarray, annotation_volume: Volume, energy_volumes: dict, 
                             image_size: int, image: np.ndarray):    
         # Clear the image
         self.clear_image()
@@ -507,4 +526,108 @@ class RaycastRendererImplementation(RaycastRenderer):
                 image[(j * image_size + i) * 4 + 2] = blue
                 image[(j * image_size + i) * 4 + 3] = alpha
 
+    # visualize both energies and annotations
+    def render_mouse_brain(self, view_matrix: np.ndarray, annotation_volume: Volume, energy_volumes: dict, 
+                            image_size: int, image: np.ndarray):    
+        # Clear the image
+        self.clear_image()
+
+        # set tfunction for each energy
+        # TODO: calcolare tfuncions in funzione del massimo totale
+        colors = get_colors_vector()
+        tfunc_dict = {}
+        for key in energy_volumes.keys():   
+            # find tfcuntion color and maximum value of energy
+            tmp_color = colors.pop()
+            range_max = math.ceil(np.max(energy_volumes[key].data) * 1.25)
+            
+            # define tfunction of the energy volume
+            tmp_tfunc = TransferFunction()
+            tmp_tfunc.init(0, range_max, tmp_color)
+            tfunc_dict[key] = tmp_tfunc
+
+        # ration vectors
+        u_vector = view_matrix[0:3] # X
+        v_vector = view_matrix[4:7] # Y
+        view_vector = view_matrix[8:11] # Z
+
+        # Center of the image. Image is squared
+        image_center = image_size / 2
+
+        # Center of the volume (3-dimensional)
+        volume_center = [annotation_volume.dim_x / 2, annotation_volume.dim_y / 2, annotation_volume.dim_z / 2]
+        diagonal = math.floor(math.sqrt(annotation_volume.dim_x**2 + annotation_volume.dim_y**2 + annotation_volume.dim_z**2) / 2)
+
+        # Define a step size to make the loop faster
+        step = 10 if self.interactive_mode else 1
+
+        for i in tqdm(range(0, image_size, step), desc='render', leave=False):
+            for j in range(0, image_size, step):
+
+                last_color: TFColor = None
+                max_value: float = 0.0
+                for z in range(diagonal, -diagonal, -1):
+
+                    # Get the voxel coordinate X
+                    voxel_coordinate_x = math.floor(u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) \
+                                        + view_vector[0] * z + volume_center[0])
+
+                    # Get the voxel coordinate Y
+                    voxel_coordinate_y = math.floor(u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) \
+                                        + view_vector[1] * z + volume_center[1])
+
+                    # Get the voxel coordinate Z
+                    voxel_coordinate_z = math.floor(u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) \
+                                        + view_vector[2] * z + volume_center[2])
+                    
+                    ###########################################
+                    ######## COMPOSITING CON MAX VOXEL ########
+                    # Get maximum voxel value
+                    voxel_color: TFColor = get_max_voxel_color_annot(voxel_coordinate_x, voxel_coordinate_y, \
+                                                                voxel_coordinate_z, energy_volumes, tfunc_dict, \
+                                                                annotation_volume, self.annotation_gradient_volume)
+
+                    if voxel_color != None:
+                        # Get voxel RGBA
+                        voxel_color = TFColor(voxel_color.r*voxel_color.a, voxel_color.g*voxel_color.a, \
+                                            voxel_color.b*voxel_color.a, voxel_color.a)
+                        if last_color != None:
+                            r = voxel_color.r + (1 - voxel_color.a)*last_color.r
+                            g = voxel_color.g + (1 - voxel_color.a)*last_color.g
+                            b = voxel_color.b + (1 - voxel_color.a)*last_color.b
+                            voxel_color = TFColor(r, g, b, 1.0)
+                        last_color = voxel_color
+                    ###########################################
+                    ################### MIP ###################
+                    # tupla: tuple(TFColor, float) = get_max_voxel_color(voxel_coordinate_x, voxel_coordinate_y, \
+                    #                                              voxel_coordinate_z, energy_volumes, tfunc_dict)
+
+                    # if tupla[1] > max_value:
+                    #     last_color = tupla[0]
+                    #     max_value = tupla[1]
+
+
+                # set color pixel image
+                if last_color != None:
+                    red = last_color.r
+                    green = last_color.g
+                    blue = last_color.b
+                    alpha = 1.0
+                else:
+                    red = 0.0
+                    green = 0.0
+                    blue = 0.0
+                    alpha = 0.0
+
+                # Compute the color value (0...255)
+                red = math.floor(red * 255) if red < 255 else 255
+                green = math.floor(green * 255) if green < 255 else 255
+                blue = math.floor(blue * 255) if blue < 255 else 255
+                alpha = math.floor(alpha * 255) if alpha < 255 else 255
+
+                # Assign color to the pixel i, j
+                image[(j * image_size + i) * 4] = red
+                image[(j * image_size + i) * 4 + 1] = green
+                image[(j * image_size + i) * 4 + 2] = blue
+                image[(j * image_size + i) * 4 + 3] = alpha
 
