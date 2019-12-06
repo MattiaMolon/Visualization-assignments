@@ -42,7 +42,7 @@ class Visualization(glcanvas.GLCanvas):
 
         self.winWidth = 800
         self.winHeight = 600
-        self.fov = 8.0
+        self.fov = 20.0
         self.trackball = TrackballInteractor(self.winWidth, self.winHeight)
         self.renderer = RaycastRendererImplementation(tfunc)
 
@@ -54,7 +54,7 @@ class Visualization(glcanvas.GLCanvas):
         Convenient method to set the volume that we want to render
         :param volume: Volume to be set (see `~volume.Volume`)
         """
-
+        self.fov = 20.0
         self.renderer.set_volume(volume)
         self.Refresh(False)
 
@@ -71,6 +71,7 @@ class Visualization(glcanvas.GLCanvas):
         self.Refresh(False)
 
     def set_annotation_volume(self, volume):
+        self.fov = 7.0
         self.renderer.set_annotation_volume(volume)
         self.Refresh(False)
 

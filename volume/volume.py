@@ -58,7 +58,7 @@ class GradientVolume:
     def __init__(self, volume: Volume):
         self.volume = volume
         self.data = []
-        self.n_structures = -1           # number of biggest sections, if -1 we consider the entire brain
+        self.n_structures = 4           # number of biggest sections, if -1 we consider the entire brain
         self.mask = np.asarray([])      
         self.compute()
         self.max_magnitude = -1.0
