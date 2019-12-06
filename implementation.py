@@ -1,10 +1,12 @@
 import numpy as np
 from genevis.render import RaycastRenderer
-from genevis.transfer_function import TFColor
+from genevis.transfer_function import TFColor, TransferFunction
 from volume.volume import GradientVolume, Volume
 from collections.abc import ValuesView
 from tqdm import tqdm
 import math
+import pandas as pd
+import random as rand
 
 def get_solid_colors():
     """
@@ -22,6 +24,10 @@ def get_solid_colors():
     colors.append([1.0, 0.6, 0.2]) # orange
     colors.append([0.0, 1.0, 1.0]) # light blue
     return colors
+
+def hex_to_rgb(hex: str) -> tuple:
+    c = tuple(int(hex[i:i+2], 16) for i in (0, 2, 4))
+    return TFColor(c[0]/255.0, c[1]/255.0, c[2]/255.0, 0.6)
 
 def get_voxel(volume: Volume, x: float, y: float, z: float):
     """
@@ -223,7 +229,7 @@ class RaycastRendererImplementation(RaycastRenderer):
             for j in range(0, image_size, step):
 
                 last_color: TFColor = None
-                for k in range(diagonal, -diagonal, -1):
+                for k in range(diagonal, -diagonal, -2):
                     # Get the voxel coordinates
                     x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) + view_vector[0] * k + volume_center[0]
                     y = u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) + view_vector[1] * k + volume_center[1]
@@ -288,18 +294,33 @@ class RaycastRendererImplementation(RaycastRenderer):
         #################################################
         # set of different functions
         # TODO: aggiungere posibilità di colorare le varie parti con i colori del csv!
-        # self.visualize_annotations_only(view_matrix, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision = 1)
+        self.visualize_annotations_only(view_matrix, mask_volume, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision = 1)
         # self.visualize_energies_only(view_matrix, mask_volume, energy_volumes, image_size, image, annotation_aware = True, precision = 1)
-        self.visualize_both_energies_annotations(view_matrix, mask_volume, magnitude_volume, energy_volumes, image_size, image, precision = 1)
+        # self.visualize_both_energies_annotations(view_matrix, mask_volume, magnitude_volume, energy_volumes, image_size, image, precision = 1)
 
-    def visualize_annotations_only(self, view_matrix: np.ndarray, annotation_volume: Volume, magnitude_volume: Volume,
-                           image_size: int, image: np.ndarray, csv_colors: bool = False, precision = 1):
+    def visualize_annotations_only(self, view_matrix: np.ndarray, mask_volume: Volume, annotation_volume: Volume,
+                                   magnitude_volume: Volume, image_size: int, image: np.ndarray, csv_colors: bool = False, precision = 1):
 
         # Clear the image
         self.clear_image()
 
         # set internal transfer function for boundaries
-        self.tfunc.init(0, round(self.annotation_gradient_volume.get_max_gradient_magnitude()))
+        color_dict = {}
+        if csv_colors:
+            data = pd.read_csv("datasets/MouseBrain/metadata/structures.csv")
+            data = data[["database_id", "color"]]
+            data.set_index("database_id", inplace = True)
+            unique = np.unique(annotation_volume.data[mask_volume.data.astype(bool)])
+            for x in unique:
+                if x != 0:
+                    if x in data.index:
+                        color = hex_to_rgb(data.loc[x]["color"])
+                        color_dict[x] = color
+                    else:
+                        rand.seed(x)
+                        color_dict[x] = TFColor(rand.random()*255.0, rand.random()*255.0, rand.random()*255.0, 0.6) 
+        else:
+            self.tfunc.init(0, round(self.annotation_gradient_volume.get_max_gradient_magnitude()))
 
         # rotation vectors
         u_vector = view_matrix[0:3]     # X
@@ -323,11 +344,22 @@ class RaycastRendererImplementation(RaycastRenderer):
                     x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) + view_vector[0] * k + volume_center[0]
                     y = u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) + view_vector[1] * k + volume_center[1]
                     z = u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) + view_vector[2] * k + volume_center[2]
-                    value = get_voxel(magnitude_volume, x, y, z)
+                    
+                    value = 0
+                    if csv_colors:
+                        value = get_voxel(annotation_volume, x, y, z)
+                    else:
+                        value = get_voxel(magnitude_volume, x, y, z)
 
                     # compute color
                     if value != 0:
-                        voxel_color: TFColor = self.tfunc.get_color(round(value)) # <- check round
+                        value = round(value)
+                        voxel_color = TFColor()
+                        if csv_colors and value in color_dict.keys():
+                            #print(value)
+                            voxel_color = color_dict[value]
+                        elif not csv_colors:
+                            voxel_color = self.tfunc.get_color(value)
                         voxel_color = TFColor(voxel_color.r*voxel_color.a, voxel_color.g*voxel_color.a, \
                                             voxel_color.b*voxel_color.a, voxel_color.a) 
                         if last_color != None:

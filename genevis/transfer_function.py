@@ -2,6 +2,21 @@ import math
 from wx import Colour
 
 
+class TFColor:
+    r: float
+    g: float
+    b: float
+    a: float
+
+    def __init__(self, red: float = .0, green: float = .0, blue: float = .0, alpha: float = .0):
+        self.r = red
+        self.g = green
+        self.b = blue
+        self.a = alpha
+
+    def __str__(self) -> str:
+        return f"({self.r}, {self.g}, {self.b}, {self.a})"
+
 class TransferFunction:
     sMin = 0
     sMax = 0
@@ -10,14 +25,14 @@ class TransferFunction:
     LUTsize = 0
     LUT = None
 
-    def init(self, minimum: int, maximum: int):
+    def init(self, minimum: int, maximum: int, color: TFColor = TFColor(1., 1., 1., 1.)):
         self.sMin = minimum
         self.sMax = maximum
         self.sRange = self.sMax - self.sMin
         self.control_points = []
 
         self.control_points.append(ControlPoint(minimum, TFColor()))
-        self.control_points.append(ControlPoint(maximum, TFColor(1., 1., 1., 1.)))
+        self.control_points.append(ControlPoint(maximum, color))
 
         self.LUTsize = self.sRange
         self.LUT = [None] * self.LUTsize
@@ -93,22 +108,6 @@ class TransferFunction:
                 new_color.a = prev_point.color.a + frac * (next_point.color.a - prev_point.color.a)
 
                 self.LUT[self.computeLUTindex(k)] = new_color
-
-
-class TFColor:
-    r: float
-    g: float
-    b: float
-    a: float
-
-    def __init__(self, red: float = .0, green: float = .0, blue: float = .0, alpha: float = .0):
-        self.r = red
-        self.g = green
-        self.b = blue
-        self.a = alpha
-
-    def __str__(self) -> str:
-        return f"({self.r}, {self.g}, {self.b}, {self.a})"
 
 
 class ControlPoint:
