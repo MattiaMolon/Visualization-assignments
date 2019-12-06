@@ -58,7 +58,7 @@ class GradientVolume:
     def __init__(self, volume: Volume):
         self.volume = volume
         self.data = []
-        self.n_structures = 4           # number of biggest sections, if -1 we consider the entire brain
+        self.n_structures = -1           # number of biggest sections, if -1 we consider the entire brain
         self.mask = np.asarray([])      
         self.compute()
         self.max_magnitude = -1.0
@@ -91,7 +91,7 @@ class GradientVolume:
 
         self.mask = np.isin(volume_copy.data, interested_structures)
         volume_copy.data[~self.mask] = 0
-        volume_copy.data[self.mask] = 1000
+        volume_copy.data[self.mask] = 10000
 
         # compute gradient for each voxel
         for x in tqdm(range(0, volume_copy.dim_x), desc='gradient', leave=False):

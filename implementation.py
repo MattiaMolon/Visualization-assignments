@@ -290,15 +290,15 @@ class RaycastRendererImplementation(RaycastRenderer):
                 for z in range(0, annotation_volume.dim_z):
                     magnitude_volume[x, y, z] = self.annotation_gradient_volume.get_gradient(x, y, z).magnitude
         magnitude_volume = Volume(magnitude_volume)
-        mask_volume = Volume(self.annotation_gradient_volume.mask)
+        mask_volume = np.copy(self.annotation_gradient_volume.mask).astype(int)
+        mask_volume = Volume(mask_volume)
 
         #################################################
         # set of different functions
+
         # TODO: aggiungere posibilità di colorare le varie parti con i colori del csv!
-        # self.visualize_annotations_only(view_matrix, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision=1)
-        
-        # TODO: visualize only energies in certain parts of the brain
-        self.visualize_energies_only(view_matrix, mask_volume, energy_volumes, image_size, image, annotation_aware = False, precision = 1)
+        self.visualize_annotations_only(view_matrix, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision = 1)
+        # self.visualize_energies_only(view_matrix, mask_volume, energy_volumes, image_size, image, annotation_aware = True, precision = 1)
 
     def visualize_annotations_only(self, view_matrix: np.ndarray, annotation_volume: Volume, magnitude_volume: Volume,
                            image_size: int, image: np.ndarray, csv_colors: bool = False, precision = 1):
@@ -406,22 +406,30 @@ class RaycastRendererImplementation(RaycastRenderer):
                     y = u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) + view_vector[1] * k + volume_center[1]
                     z = u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) + view_vector[2] * k + volume_center[2]
                     
-                    # Compute voxel color
+                    # Decide if compute voxel color
+                    compute_voxel = True
+                    if annotation_aware:
+                        compute_result = get_voxel(mask_volume, x, y, z)
+                        if compute_result == 0:
+                            compute_voxel = False
+
+                    # compute voxel color
                     voxel_color: TFColor = None   # voxel color in point x, y, z
-                    for key in energy_volumes.keys():
-                        value = get_voxel(energy_volumes[key], x, y, z)
-                        if value > 0:
-                            intensity = value/energy_max_intensity[key]
-                            energy_voxel_color = TFColor(energy_color[key][0] * intensity, \
-                                                         energy_color[key][1] * intensity, \
-                                                         energy_color[key][2] * intensity, \
-                                                         intensity) # color of the energy in x, y, z
-                            if voxel_color != None:
-                                energy_voxel_color = TFColor(energy_voxel_color.r + voxel_color.r * (1 - intensity), \
-                                                             energy_voxel_color.g + voxel_color.g * (1 - intensity), \
-                                                             energy_voxel_color.b + voxel_color.b * (1 - intensity), \
-                                                             max([intensity, voxel_color.a]))
-                            voxel_color = energy_voxel_color
+                    if compute_voxel:
+                        for key in energy_volumes.keys():
+                            value = get_voxel(energy_volumes[key], x, y, z)
+                            if value > 0:
+                                intensity = value/energy_max_intensity[key]
+                                energy_voxel_color = TFColor(energy_color[key][0] * intensity, \
+                                                            energy_color[key][1] * intensity, \
+                                                            energy_color[key][2] * intensity, \
+                                                            intensity) # color of the energy in x, y, z
+                                if voxel_color != None:
+                                    energy_voxel_color = TFColor(energy_voxel_color.r + voxel_color.r * (1 - intensity), \
+                                                                energy_voxel_color.g + voxel_color.g * (1 - intensity), \
+                                                                energy_voxel_color.b + voxel_color.b * (1 - intensity), \
+                                                                max([intensity, voxel_color.a]))
+                                voxel_color = energy_voxel_color
 
                     # compute ray color
                     if voxel_color != None:
