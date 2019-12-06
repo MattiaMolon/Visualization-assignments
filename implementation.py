@@ -6,6 +6,22 @@ from collections.abc import ValuesView
 from tqdm import tqdm
 import math
 
+def get_solid_colors():
+    """
+    get vector containing 10 solid colors in order to color the energies
+    """
+    colors = []
+    colors.append([1.0, 0.0, 0.0]) # red
+    colors.append([0.6, 0.4, 0.2]) # brown
+    colors.append([0.0, 0.0, 1.0]) # blue
+    colors.append([0.4, 0.0, 0.8]) # dark purple
+    colors.append([0.4, 1.0, 0.4]) # light green
+    colors.append([0.0, 1.0, 0.0]) # green 
+    colors.append([1.0, 1.0, 0.0]) # yellow
+    colors.append([1.0, 0.0, 1.0]) # purple
+    colors.append([1.0, 0.6, 0.2]) # orange
+    colors.append([0.0, 1.0, 1.0]) # light blue
+    return colors
 
 def get_voxel(volume: Volume, x: float, y: float, z: float):
     """
@@ -267,26 +283,31 @@ class RaycastRendererImplementation(RaycastRenderer):
         fucntion that implements the visualization of the mouse brain.
         select below the function that you want in order to visualize the data.
         """
-        # create volume for the gradient magnitude
+        # create volumes for the gradient magnitude and mask
         magnitude_volume = np.zeros(annotation_volume.data.shape)
         for x in range(0, annotation_volume.dim_x):
             for y in range(0, annotation_volume.dim_y):
                 for z in range(0, annotation_volume.dim_z):
                     magnitude_volume[x, y, z] = self.annotation_gradient_volume.get_gradient(x, y, z).magnitude
         magnitude_volume = Volume(magnitude_volume)
-        
-        # set internal transfer function for borders
-        self.tfunc.init(0, round(self.annotation_gradient_volume.get_max_gradient_magnitude()))
+        mask_volume = Volume(self.annotation_gradient_volume.mask)
 
+        #################################################
         # set of different functions
-        self.visualize_annotations_only(view_matrix, annotation_volume, magnitude_volume, image_size, image, csv_colors=False, precision=1)
-    
+        # TODO: aggiungere posibilità di colorare le varie parti con i colori del csv!
+        # self.visualize_annotations_only(view_matrix, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision=1)
+        
+        # TODO: visualize only energies in certain parts of the brain
+        self.visualize_energies_only(view_matrix, mask_volume, energy_volumes, image_size, image, annotation_aware = False, precision = 1)
 
     def visualize_annotations_only(self, view_matrix: np.ndarray, annotation_volume: Volume, magnitude_volume: Volume,
                            image_size: int, image: np.ndarray, csv_colors: bool = False, precision = 1):
 
         # Clear the image
         self.clear_image()
+
+        # set internal transfer function for borders
+        self.tfunc.init(0, round(self.annotation_gradient_volume.get_max_gradient_magnitude()))
 
         # rotation vectors
         u_vector = view_matrix[0:3]     # X
@@ -335,6 +356,96 @@ class RaycastRendererImplementation(RaycastRenderer):
                     green = last_color.g
                     blue = last_color.b
                     alpha = last_color.a if red > 0 and green > 0 and blue > 0 else 0.0
+
+                # Compute the color value (0...255)
+                red = math.floor(red * 255) if red < 255 else 255
+                green = math.floor(green * 255) if green < 255 else 255
+                blue = math.floor(blue * 255) if blue < 255 else 255
+                alpha = math.floor(alpha * 255) if alpha < 255 else 255
+
+                # Assign color to the pixel i, j
+                image[(j * image_size + i) * 4] = red
+                image[(j * image_size + i) * 4 + 1] = green
+                image[(j * image_size + i) * 4 + 2] = blue
+                image[(j * image_size + i) * 4 + 3] = alpha                 
+
+    def visualize_energies_only(self, view_matrix: np.ndarray, mask_volume: Volume, energy_volumes: dict, 
+                                image_size: int, image: np.ndarray, annotation_aware = False, precision = 1):
+
+        # Clear the image
+        self.clear_image()
+
+        # get dictionary of colors and intensity for the energies
+        colors = get_solid_colors()
+        energy_color = {}           # dictionary {energy_key -> [r,g,b]}
+        energy_max_intensity = {}   # dictionary {energy_key -> max_intensity}
+        for key in energy_volumes.keys():
+            energy_color[key] = colors.pop()
+            energy_max_intensity[key] = np.max(energy_volumes[key].data)
+
+        # rotation vectors
+        u_vector = view_matrix[0:3]     # X
+        v_vector = view_matrix[4:7]     # Y
+        view_vector = view_matrix[8:11] # Z
+
+        # image and volume in the center of the window
+        image_center = image_size / 2
+        volume_center = [mask_volume.dim_x / 2, mask_volume.dim_y / 2, mask_volume.dim_z / 2]
+        half_diagonal = math.floor(math.sqrt(mask_volume.dim_x**2 + mask_volume.dim_y**2 + mask_volume.dim_z**2) / 2)
+
+        # Define a step size to make the loop faster
+        step = 20 if self.interactive_mode else 1
+        for i in tqdm(range(0, image_size, step), desc='render', leave=False):
+            for j in range(0, image_size, step):
+
+                last_color: TFColor = None
+                for k in range(half_diagonal, -half_diagonal, -precision):
+
+                    # Get the rotated voxel value
+                    x = u_vector[0] * (i - image_center) + v_vector[0] * (j - image_center) + view_vector[0] * k + volume_center[0]
+                    y = u_vector[1] * (i - image_center) + v_vector[1] * (j - image_center) + view_vector[1] * k + volume_center[1]
+                    z = u_vector[2] * (i - image_center) + v_vector[2] * (j - image_center) + view_vector[2] * k + volume_center[2]
+                    
+                    # Compute voxel color
+                    voxel_color: TFColor = None   # voxel color in point x, y, z
+                    for key in energy_volumes.keys():
+                        value = get_voxel(energy_volumes[key], x, y, z)
+                        if value > 0:
+                            intensity = value/energy_max_intensity[key]
+                            energy_voxel_color = TFColor(energy_color[key][0] * intensity, \
+                                                         energy_color[key][1] * intensity, \
+                                                         energy_color[key][2] * intensity, \
+                                                         intensity) # color of the energy in x, y, z
+                            if voxel_color != None:
+                                energy_voxel_color = TFColor(energy_voxel_color.r + voxel_color.r * (1 - intensity), \
+                                                             energy_voxel_color.g + voxel_color.g * (1 - intensity), \
+                                                             energy_voxel_color.b + voxel_color.b * (1 - intensity), \
+                                                             max([intensity, voxel_color.a]))
+                            voxel_color = energy_voxel_color
+
+                    # compute ray color
+                    if voxel_color != None:
+                        voxel_color = TFColor(voxel_color.r*voxel_color.a, voxel_color.g*voxel_color.a, \
+                                              voxel_color.b*voxel_color.a, voxel_color.a)
+                        if last_color != None:
+                            voxel_color = TFColor(voxel_color.r + last_color.r*(1-voxel_color.a), \
+                                                  voxel_color.g + last_color.g*(1-voxel_color.a), \
+                                                  voxel_color.b + last_color.b*(1-voxel_color.a), \
+                                                  1.0)
+                        last_color = voxel_color
+
+
+                # Select RGB values
+                if last_color == None:
+                    red = 0.0
+                    green = 0.0
+                    blue = 0.0
+                    alpha = 0.0
+                else:
+                    red = last_color.r
+                    green = last_color.g
+                    blue = last_color.b
+                    alpha = last_color.a if red > 0 or green > 0 or blue > 0 else 0.0
 
                 # Compute the color value (0...255)
                 red = math.floor(red * 255) if red < 255 else 255

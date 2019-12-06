@@ -42,7 +42,7 @@ class Visualization(glcanvas.GLCanvas):
 
         self.winWidth = 800
         self.winHeight = 600
-        self.fov = 7.0
+        self.fov = 8.0
         self.trackball = TrackballInteractor(self.winWidth, self.winHeight)
         self.renderer = RaycastRendererImplementation(tfunc)
 
