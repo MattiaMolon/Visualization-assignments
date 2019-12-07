@@ -294,7 +294,7 @@ class RaycastRendererImplementation(RaycastRenderer):
         #################################################
         # set of different functions
         # TODO: aggiungere posibilità di colorare le varie parti con i colori del csv!
-        self.visualize_annotations_only(view_matrix, mask_volume, annotation_volume, magnitude_volume, image_size, image, csv_colors = False, precision = 1)
+        self.visualize_annotations_only(view_matrix, mask_volume, annotation_volume, magnitude_volume, image_size, image, csv_colors = True, precision = 1)
         # self.visualize_energies_only(view_matrix, mask_volume, energy_volumes, image_size, image, annotation_aware = True, precision = 1)
         # self.visualize_both_energies_annotations(view_matrix, mask_volume, magnitude_volume, energy_volumes, image_size, image, precision = 1)
 
@@ -318,7 +318,7 @@ class RaycastRendererImplementation(RaycastRenderer):
                         color_dict[x] = color
                     else:
                         rand.seed(x)
-                        color_dict[x] = TFColor(rand.random()*255.0, rand.random()*255.0, rand.random()*255.0, 0.6) 
+                        color_dict[x] = TFColor(rand.random()*255.0, rand.random()*255.0, rand.random()*255.0, 0.5) 
         else:
             self.tfunc.init(0, round(self.annotation_gradient_volume.get_max_gradient_magnitude()))
 
@@ -347,7 +347,13 @@ class RaycastRendererImplementation(RaycastRenderer):
                     
                     value = 0
                     if csv_colors:
-                        value = get_voxel(annotation_volume, x, y, z)
+                        # rounding value to closest value
+                        x = round(x)
+                        y = round(y)
+                        z = round(z)
+                        if x > 0 or y > 0 or z > 0 or x < annotation_volume.dim_x - 1 \
+                           or y < annotation_volume.dim_y - 1 or z < annotation_volume.dim_z - 1 :
+                            value = get_voxel(annotation_volume, x, y, z)
                     else:
                         value = get_voxel(magnitude_volume, x, y, z)
 
@@ -356,7 +362,6 @@ class RaycastRendererImplementation(RaycastRenderer):
                         value = round(value)
                         voxel_color = TFColor()
                         if csv_colors and value in color_dict.keys():
-                            #print(value)
                             voxel_color = color_dict[value]
                         elif not csv_colors:
                             voxel_color = self.tfunc.get_color(value)
