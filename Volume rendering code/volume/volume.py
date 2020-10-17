@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from tqdm import tqdm
 
 
 class Volume:
@@ -54,13 +55,15 @@ ZERO_GRADIENT = VoxelGradient()
 
 
 class GradientVolume:
-    def __init__(self, volume):
+    def __init__(self, volume: Volume):
         self.volume = volume
         self.data = []
+        self.n_structures = -1           # number of biggest sections, if -1 we consider the entire brain
+        self.mask = np.asarray([])      
         self.compute()
         self.max_magnitude = -1.0
 
-    def get_gradient(self, x, y, z):
+    def get_gradient(self, x, y, z) -> VoxelGradient:
         return self.data[x + self.volume.dim_x * (y + self.volume.dim_y * z)]
 
     def set_gradient(self, x, y, z, value):
@@ -73,8 +76,35 @@ class GradientVolume:
         """
         Computes the gradient for the current volume
         """
-        # this just initializes all gradients to the vector (0,0,0)
+        # prepare data to compute gradient
         self.data = [ZERO_GRADIENT] * (self.volume.dim_x * self.volume.dim_y * self.volume.dim_z)
+        volume_copy = Volume(np.copy(self.volume.data))
+        unique, frequencies = np.unique(volume_copy.data, return_counts=True) 
+        indexes_freq = np.flip(np.argsort(frequencies))
+        
+        # select only part of the ids if requested
+        interested_structures = []
+        if self.n_structures != -1:
+            interested_structures = [unique[indexes_freq[i]] for i in range(1, self.n_structures + 1)]
+        else:
+            interested_structures = unique[1:]
+
+        self.mask = np.isin(volume_copy.data, interested_structures)
+        volume_copy.data[~self.mask] = 0
+        volume_copy.data[self.mask] = 10000
+
+        # compute gradient for each voxel
+        for x in tqdm(range(0, volume_copy.dim_x), desc='gradient', leave=False):
+            for y in range(0, volume_copy.dim_y):
+                for z in range(0, volume_copy.dim_z):
+                    if x == 0 or y == 0 or z == 0 or x == volume_copy.dim_x - 1 or y == volume_copy.dim_y - 1 or z == volume_copy.dim_z - 1:
+                        self.set_gradient(x, y, z, VoxelGradient())
+                    else: 
+                        gx = 0.5 * (volume_copy.get_voxel(x-1, y, z) - volume_copy.get_voxel(x+1, y, z))
+                        gy = 0.5 * (volume_copy.get_voxel(x, y-1, z) - volume_copy.get_voxel(x, y+1, z))
+                        gz = 0.5 * (volume_copy.get_voxel(x, y, z-1) - volume_copy.get_voxel(x, y, z+1))
+                        self.set_gradient(x, y, z, VoxelGradient(gx, gy, gz))  
+
 
     def get_max_gradient_magnitude(self):
         if self.max_magnitude < 0:
